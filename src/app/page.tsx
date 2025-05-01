@@ -8,6 +8,7 @@ interface Subscription {
   name: string
   email: string
   lastReceived: string
+  unsubscribeLink: string
 }
 
 export default function Home() {
@@ -16,22 +17,48 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
+  const [unsubscribing, setUnsubscribing] = useState<string | null>(null)
+
+  const handleGoogleSignIn = async () => {
+    console.log('Attempting to sign in with Google...')
+    try {
+      const result = await signIn('google', { 
+        callbackUrl: '/',
+        redirect: false 
+      })
+      console.log('Sign-in result:', result)
+      
+      if (result?.error) {
+        console.error('Sign-in error:', result.error)
+        setError(result.error)
+      }
+    } catch (error) {
+      console.error('Sign-in exception:', error)
+      setError('Failed to sign in')
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
     
+    console.log('Session data:', session)
+    console.log('Access token:', session?.accessToken)
+    
     try {
       const response = await fetch('/api/check-subscriptions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.accessToken}`,
         },
         body: JSON.stringify({ email }),
       })
 
+      console.log('Response status:', response.status)
       const data = await response.json()
+      console.log('Response data:', data)
       
       if (!response.ok) {
         throw new Error(data.error || 'Failed to check subscriptions')
@@ -39,10 +66,50 @@ export default function Home() {
 
       setSubscriptions(data.subscriptions)
     } catch (error) {
+      console.error('Submit error:', error)
       setError(error instanceof Error ? error.message : 'An error occurred')
       setSubscriptions([])
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleUnsubscribe = async (subscription: Subscription) => {
+    try {
+      setUnsubscribing(subscription.email)
+      setError('')
+
+      const response = await fetch('/api/unsubscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.accessToken}`,
+        },
+        body: JSON.stringify({
+          unsubscribeLink: subscription.unsubscribeLink,
+          email: subscription.email
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to unsubscribe')
+      }
+
+      if (data.type === 'url') {
+        // Open HTTP/HTTPS unsubscribe links in a new tab
+        window.open(data.url, '_blank')
+      }
+
+      // Remove the subscription from the list
+      setSubscriptions(current =>
+        current.filter(sub => sub.email !== subscription.email)
+      )
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to unsubscribe')
+    } finally {
+      setUnsubscribing(null)
     }
   }
 
@@ -62,7 +129,7 @@ export default function Home() {
           {!session ? (
             <div className="max-w-md mx-auto text-center">
               <button
-                onClick={() => signIn('google')}
+                onClick={handleGoogleSignIn}
                 className="inline-flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 
                          rounded-lg text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 
                          focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
@@ -73,6 +140,9 @@ export default function Home() {
               <p className="mt-4 text-sm text-gray-600">
                 Connect your Gmail account to automatically find your subscriptions
               </p>
+              {error && (
+                <p className="mt-4 text-sm text-red-600">{error}</p>
+              )}
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="max-w-md mx-auto">
@@ -116,9 +186,9 @@ export default function Home() {
             <div className="mt-12 max-w-2xl mx-auto">
               <h2 className="text-xl font-semibold mb-6">Your Subscriptions</h2>
               <div className="space-y-4">
-                {subscriptions.map((sub, index) => (
+                {subscriptions.map((sub) => (
                   <div
-                    key={index}
+                    key={sub.email}
                     className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200"
                   >
                     <div className="flex-1 min-w-0">
@@ -131,19 +201,29 @@ export default function Home() {
                       </p>
                     </div>
                     <button
-                      onClick={() => {
-                        // TODO: Implement unsubscribe functionality
-                        alert(`Unsubscribe from ${sub.name} coming soon!`)
-                      }}
+                      onClick={() => handleUnsubscribe(sub)}
+                      disabled={unsubscribing === sub.email}
                       className="ml-4 flex items-center gap-1 px-3 py-1 text-sm text-red-600 hover:text-red-700
-                               hover:bg-red-50 rounded-md transition-colors duration-200"
+                               hover:bg-red-50 rounded-md transition-colors duration-200 disabled:opacity-50"
                     >
-                      <ExternalLink className="h-4 w-4" />
-                      Unsubscribe
+                      {unsubscribing === sub.email ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Unsubscribing...
+                        </>
+                      ) : (
+                        <>
+                          <ExternalLink className="h-4 w-4" />
+                          Unsubscribe
+                        </>
+                      )}
                     </button>
                   </div>
                 ))}
               </div>
+              {error && (
+                <p className="mt-4 text-sm text-red-600 text-center">{error}</p>
+              )}
             </div>
           )}
         </div>
