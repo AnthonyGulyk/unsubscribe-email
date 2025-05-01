@@ -29,11 +29,16 @@ export async function POST(request: Request) {
 
     console.log('API: Searching for messages...')
     try {
+      // Get the Unsubscribed label ID if it exists
+      const labels = await gmail.users.labels.list({ userId: 'me' })
+      const unsubscribedLabel = labels.data.labels?.find(l => l.name === 'Unsubscribed')
+      const unsubscribedLabelId = unsubscribedLabel?.id
+
       // First, let's try to list any messages to verify API access
       const testResponse = await gmail.users.messages.list({
         userId: 'me',
         maxResults: 10,
-        q: 'category:promotions' // Start with promotional emails as they're likely newsletters
+        q: unsubscribedLabelId ? `-label:${unsubscribedLabel.name} category:promotions` : 'category:promotions'
       })
 
       console.log('API: Test query response:', {
@@ -63,7 +68,7 @@ export async function POST(request: Request) {
         try {
           const details = await gmail.users.messages.get({
             userId: 'me',
-            id: message.id!,
+            id: message.id,
             format: 'metadata',
             metadataHeaders: ['From', 'Subject', 'List-Unsubscribe', 'Date']
           })
@@ -77,10 +82,22 @@ export async function POST(request: Request) {
           const from = headers.find(h => h.name === 'From')?.value || ''
           const listUnsubscribe = headers.find(h => h.name === 'List-Unsubscribe')?.value
           
+          console.log('API: List-Unsubscribe header:', listUnsubscribe)
+          
           // Only include if it has an unsubscribe header
           if (listUnsubscribe) {
             const match = from.match(/<(.+?)>/) || from.match(/(.+)/)
             const emailAddress = match ? match[1].trim() : from.trim()
+            
+            // Parse the List-Unsubscribe header
+            // It might be in the format: <mailto:...>, <http...> or just a single URL
+            const unsubscribeUrls = listUnsubscribe.match(/<([^>]+)>/g) || [listUnsubscribe]
+            // Clean the URLs and prefer HTTP links over mailto
+            const cleanUrls = unsubscribeUrls.map(url => url.replace(/[<>]/g, '').trim())
+            const unsubscribeLink = cleanUrls.find(url => url.startsWith('http')) || cleanUrls[0]
+            
+            console.log('API: All unsubscribe links:', cleanUrls)
+            console.log('API: Selected unsubscribe link:', unsubscribeLink)
             
             if (!subscriptions.has(emailAddress)) {
               console.log('API: Adding subscription for:', emailAddress)
@@ -88,7 +105,8 @@ export async function POST(request: Request) {
                 name: from.replace(/<.*>/, '').trim() || emailAddress,
                 email: emailAddress,
                 lastReceived: new Date(headers.find(h => h.name === 'Date')?.value || '').toISOString().split('T')[0],
-                unsubscribeLink: listUnsubscribe
+                unsubscribeLink,
+                messageId: message.id
               })
             }
           }

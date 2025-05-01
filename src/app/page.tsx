@@ -9,6 +9,7 @@ interface Subscription {
   email: string
   lastReceived: string
   unsubscribeLink: string
+  messageId: string
 }
 
 export default function Home() {
@@ -18,6 +19,7 @@ export default function Home() {
   const [error, setError] = useState('')
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [unsubscribing, setUnsubscribing] = useState<string | null>(null)
+  const [unsubscribeStatus, setUnsubscribeStatus] = useState<string>('')
 
   const handleGoogleSignIn = async () => {
     console.log('Attempting to sign in with Google...')
@@ -78,6 +80,7 @@ export default function Home() {
     try {
       setUnsubscribing(subscription.email)
       setError('')
+      setUnsubscribeStatus('Starting unsubscribe process...')
 
       const response = await fetch('/api/unsubscribe', {
         method: 'POST',
@@ -87,7 +90,8 @@ export default function Home() {
         },
         body: JSON.stringify({
           unsubscribeLink: subscription.unsubscribeLink,
-          email: subscription.email
+          email: subscription.email,
+          messageId: subscription.messageId
         }),
       })
 
@@ -100,16 +104,26 @@ export default function Home() {
       if (data.type === 'url') {
         // Open HTTP/HTTPS unsubscribe links in a new tab
         window.open(data.url, '_blank')
+        setUnsubscribeStatus('Unsubscribe link opened in new tab. Please complete the process there.')
+      } else {
+        setUnsubscribeStatus('Successfully unsubscribed!')
       }
 
-      // Remove the subscription from the list
-      setSubscriptions(current =>
-        current.filter(sub => sub.email !== subscription.email)
-      )
+      // Remove the subscription from the list after a short delay
+      setTimeout(() => {
+        setSubscriptions(current =>
+          current.filter(sub => sub.email !== subscription.email)
+        )
+        setUnsubscribeStatus('')
+      }, 2000)
     } catch (error) {
+      console.error('Unsubscribe error:', error)
       setError(error instanceof Error ? error.message : 'Failed to unsubscribe')
+      setUnsubscribeStatus('')
     } finally {
-      setUnsubscribing(null)
+      setTimeout(() => {
+        setUnsubscribing(null)
+      }, 2000)
     }
   }
 
@@ -199,6 +213,11 @@ export default function Home() {
                       <p className="text-xs text-gray-400 mt-1">
                         Last received: {sub.lastReceived}
                       </p>
+                      {unsubscribing === sub.email && unsubscribeStatus && (
+                        <p className="text-xs text-blue-600 mt-1">
+                          {unsubscribeStatus}
+                        </p>
+                      )}
                     </div>
                     <button
                       onClick={() => handleUnsubscribe(sub)}
