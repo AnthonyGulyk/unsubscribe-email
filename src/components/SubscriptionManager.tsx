@@ -45,16 +45,6 @@ export function SubscriptionManager() {
         throw new Error(data.error || 'Failed to check subscriptions')
       }
 
-      if (!data.subscriptions) {
-        setError(`No subscriptions found. Debug info: ${JSON.stringify(data.debug)}`)
-        setSubscriptions([])
-        return
-      }
-
-      if (data.subscriptions.length === 0) {
-        setError(`No subscriptions found in the last 30 days. Messages checked: ${data.debug?.totalMessages || 0}`)
-      }
-
       setSubscriptions(data.subscriptions || [])
     } catch (error) {
       console.error('Submit error:', error)
@@ -90,34 +80,14 @@ export function SubscriptionManager() {
         throw new Error(data.error || 'Failed to unsubscribe')
       }
 
-      if (data.type === 'url') {
-        if (data.success) {
-          setUnsubscribeStatus('Successfully unsubscribed!')
-          setTimeout(() => {
-            setSubscriptions(current =>
-              current.filter(sub => sub.email !== subscription.email)
-            )
-            setUnsubscribeStatus('')
-            setUnsubscribing(null)
-          }, 2000)
-        } else {
-          window.open(data.url, '_blank')
-          setUnsubscribeStatus('Automatic unsubscribe failed. Please complete the process in the new tab.')
-          setTimeout(() => {
-            setUnsubscribeStatus('')
-            setUnsubscribing(null)
-          }, 5000)
-        }
-      } else {
-        setUnsubscribeStatus('Successfully unsubscribed!')
-        setTimeout(() => {
-          setSubscriptions(current =>
-            current.filter(sub => sub.email !== subscription.email)
-          )
-          setUnsubscribeStatus('')
-          setUnsubscribing(null)
-        }, 2000)
-      }
+      setUnsubscribeStatus('Successfully unsubscribed!')
+      setTimeout(() => {
+        setSubscriptions(current =>
+          current.filter(sub => sub.email !== subscription.email)
+        )
+        setUnsubscribeStatus('')
+        setUnsubscribing(null)
+      }, 2000)
     } catch (error) {
       console.error('Unsubscribe error:', error)
       setError(error instanceof Error ? error.message : 'Failed to unsubscribe')
@@ -130,7 +100,14 @@ export function SubscriptionManager() {
     <div className="space-y-8">
       <div className="card">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-neutral-900">Your Subscriptions</h2>
+          <div>
+            <h2 className="text-2xl font-bold text-neutral-900">Your Subscriptions</h2>
+            {subscriptions.length > 0 && (
+              <p className="text-sm text-neutral-600 mt-1">
+                Found {subscriptions.length} subscription{subscriptions.length === 1 ? '' : 's'}
+              </p>
+            )}
+          </div>
           <button
             onClick={handleFindSubscriptions}
             disabled={loading}
@@ -156,31 +133,34 @@ export function SubscriptionManager() {
           </div>
         )}
 
-        <div className="space-y-4">
+        <div className="space-y-2">
           {subscriptions.map((sub) => (
             <div
               key={sub.email}
-              className="card bg-neutral-50 hover:bg-white transition-all duration-200"
+              className="card bg-neutral-50 hover:bg-white transition-all duration-200 p-3"
             >
               <div className="flex items-center justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-neutral-900 truncate">
-                    {sub.name}
-                  </h3>
-                  <p className="text-sm text-neutral-600 truncate">{sub.email}</p>
-                  <p className="text-xs text-neutral-500 mt-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-medium text-neutral-900 truncate">
+                      {sub.name}
+                    </h3>
+                    <span className="text-sm text-neutral-500">•</span>
+                    <span className="text-sm text-neutral-600 truncate">{sub.email}</span>
+                  </div>
+                  <p className="text-xs text-neutral-500">
                     Last received: {sub.lastReceived}
+                    {unsubscribing === sub.email && unsubscribeStatus && (
+                      <span className="text-primary-600 ml-2 animate-pulse">
+                        {unsubscribeStatus}
+                      </span>
+                    )}
                   </p>
-                  {unsubscribing === sub.email && unsubscribeStatus && (
-                    <p className="text-xs text-primary-600 mt-1 animate-pulse">
-                      {unsubscribeStatus}
-                    </p>
-                  )}
                 </div>
                 <button
                   onClick={() => handleUnsubscribe(sub)}
                   disabled={unsubscribing === sub.email}
-                  className="btn-secondary whitespace-nowrap"
+                  className="btn-secondary whitespace-nowrap h-8 px-3 text-sm"
                 >
                   {unsubscribing === sub.email ? (
                     <span className="flex items-center gap-2">

@@ -3,29 +3,29 @@
 @tailwind utilities;
 
 :root {
-  /* Primary colors */
-  --primary-50: #f0f7ff;
-  --primary-100: #e0effe;
-  --primary-200: #bae0fd;
-  --primary-300: #7cc8fb;
-  --primary-400: #36aaf4;
-  --primary-500: #0d8ee6;
-  --primary-600: #0270c3;
-  --primary-700: #045a9e;
-  --primary-800: #0a4b82;
-  --primary-900: #0d406d;
+  /* Primary colors - Calming Green */
+  --primary-50: #f0fdf4;
+  --primary-100: #dcfce7;
+  --primary-200: #bbf7d0;
+  --primary-300: #86efac;
+  --primary-400: #4ade80;
+  --primary-500: #22c55e;
+  --primary-600: #16a34a;
+  --primary-700: #15803d;
+  --primary-800: #166534;
+  --primary-900: #14532d;
   
-  /* Accent colors - playful purple */
-  --accent-50: #faf5ff;
-  --accent-100: #f3e8ff;
-  --accent-200: #e9d5ff;
-  --accent-300: #d8b4fe;
-  --accent-400: #c084fc;
-  --accent-500: #a855f7;
-  --accent-600: #9333ea;
-  --accent-700: #7e22ce;
-  --accent-800: #6b21a8;
-  --accent-900: #581c87;
+  /* Accent colors - Soft teal */
+  --accent-50: #f0fdfa;
+  --accent-100: #ccfbf1;
+  --accent-200: #99f6e4;
+  --accent-300: #5eead4;
+  --accent-400: #2dd4bf;
+  --accent-500: #14b8a6;
+  --accent-600: #0d9488;
+  --accent-700: #0f766e;
+  --accent-800: #115e59;
+  --accent-900: #134e4a;
 
   /* Neutral colors */
   --neutral-50: #f8fafc;

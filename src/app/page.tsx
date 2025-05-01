@@ -9,10 +9,10 @@ export default async function Home() {
     <main className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="text-center mb-12 fade-in">
         <h1 className="text-5xl font-bold bg-gradient-to-r from-primary-600 to-accent-600 text-transparent bg-clip-text">
-          Clean Your Inbox
+          Unsubscribr
         </h1>
         <p className="text-xl text-neutral-600 mt-4">
-          Unsubscribe from unwanted emails in one click. Take back control of your inbox!
+          Clean your inbox with one click. Simple, fast, and effective.
         </p>
       </div>
 
