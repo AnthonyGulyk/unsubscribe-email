@@ -16,13 +16,20 @@ const handler = NextAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
       authorization: {
         params: {
-          scope: 'openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.labels https://www.googleapis.com/auth/gmail.modify',
+          scope: [
+            'openid',
+            'email',
+            'profile',
+            'https://www.googleapis.com/auth/gmail.readonly',
+            'https://www.googleapis.com/auth/gmail.send',
+            'https://www.googleapis.com/auth/gmail.modify'
+          ].join(' '),
           prompt: 'consent',
           access_type: 'offline',
           response_type: 'code'
         }
       }
-    }),
+    })
   ],
   debug: true, // Enable debug messages
   logger: {
@@ -40,19 +47,28 @@ const handler = NextAuth({
     async jwt({ token, account, user }) {
       // Initial sign in
       if (account && user) {
+        console.log('Initial sign in, account:', { 
+          access_token: !!account.access_token,
+          refresh_token: !!account.refresh_token,
+          expires_at: account.expires_at,
+          id_token: !!account.id_token
+        })
         return {
           accessToken: account.access_token,
           refreshToken: account.refresh_token,
           accessTokenExpires: account.expires_at ? account.expires_at * 1000 : 0,
+          idToken: account.id_token,
           user
         }
       }
 
       // Return previous token if the access token has not expired yet
       if (Date.now() < (token.accessTokenExpires as number)) {
+        console.log('Existing token still valid')
         return token
       }
 
+      console.log('Token expired, attempting refresh')
       // Access token has expired, try to refresh it
       try {
         const response = await fetch('https://oauth2.googleapis.com/token', {
@@ -68,12 +84,17 @@ const handler = NextAuth({
 
         const tokens = await response.json()
 
-        if (!response.ok) throw tokens
+        if (!response.ok) {
+          console.error('Token refresh failed:', tokens)
+          throw tokens
+        }
 
+        console.log('Token refresh successful')
         return {
           ...token,
           accessToken: tokens.access_token,
           accessTokenExpires: Date.now() + (tokens.expires_in as number) * 1000,
+          idToken: tokens.id_token ?? token.idToken, // Preserve existing id_token if not in refresh response
         }
       } catch (error) {
         console.error('Error refreshing access token', error)

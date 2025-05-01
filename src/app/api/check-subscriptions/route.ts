@@ -34,16 +34,45 @@ export async function POST(request: Request) {
     
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
 
+    // First get or create the Unsubscribed label
+    let unsubscribedLabelId: string | null = null
+    try {
+      console.log('API: Checking for Unsubscribed label')
+      const labels = await gmail.users.labels.list({ userId: 'me' })
+      let label = labels.data.labels?.find(l => l.name === 'Unsubscribed')
+      
+      if (!label) {
+        console.log('API: Creating Unsubscribed label')
+        const created = await gmail.users.labels.create({
+          userId: 'me',
+          requestBody: {
+            name: 'Unsubscribed',
+            labelListVisibility: 'labelShow',
+            messageListVisibility: 'show'
+          }
+        })
+        label = created.data
+      }
+      unsubscribedLabelId = label.id || null
+      console.log('API: Unsubscribed label ID:', unsubscribedLabelId)
+    } catch (labelError) {
+      console.error('API: Error managing labels:', labelError)
+      // Continue without the label if there's an error
+    }
+
     console.log('API: Searching for messages...')
     try {
-      // Build the search query - start with a very permissive search
-      let searchQuery = 'newer_than:30d' // Get emails from last 30 days
-      console.log('API: Initial search query:', searchQuery)
+      // Build the search query - exclude messages with Unsubscribed label
+      let searchQuery = 'newer_than:30d'
+      if (unsubscribedLabelId) {
+        searchQuery += ` -label:Unsubscribed`
+      }
+      console.log('API: Search query:', searchQuery)
 
       // First, let's try to list any messages to verify API access
       const testResponse = await gmail.users.messages.list({
         userId: 'me',
-        maxResults: 100, // Increased to get more results
+        maxResults: 100,
         q: searchQuery
       })
 

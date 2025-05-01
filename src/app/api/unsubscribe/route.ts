@@ -167,15 +167,30 @@ async function tryUnsubscribeRequest(url: string, method: 'GET' | 'POST', email?
           'preferences updated',
           'subscription updated',
           'thank you',
-          'confirmed'
+          'confirmed',
+          'preferences saved',
+          'settings updated',
+          'email removed',
+          'successfully',
+          'subscription cancelled',
+          'subscription canceled',
+          'email preferences',
+          'notification settings'
         ]
         
         const isSuccess = response.ok || 
                          response.status === 302 || 
                          response.status === 301 || 
-                         successIndicators.some(indicator => 
-                           responseBody.toLowerCase().includes(indicator)
-                         )
+                         (responseBody && (
+                           successIndicators.some(indicator => 
+                             responseBody.toLowerCase().includes(indicator)
+                           ) ||
+                           // Check for form submission success
+                           responseBody.toLowerCase().includes('form') && 
+                           responseBody.toLowerCase().includes('submit') &&
+                           !responseBody.toLowerCase().includes('error') &&
+                           !responseBody.toLowerCase().includes('failed')
+                         ))
 
         return {
           success: isSuccess,
@@ -227,15 +242,30 @@ async function tryUnsubscribeRequest(url: string, method: 'GET' | 'POST', email?
           'preferences updated',
           'subscription updated',
           'thank you',
-          'confirmed'
+          'confirmed',
+          'preferences saved',
+          'settings updated',
+          'email removed',
+          'successfully',
+          'subscription cancelled',
+          'subscription canceled',
+          'email preferences',
+          'notification settings'
         ]
         
         const isSuccess = response.ok || 
                          response.status === 302 || 
                          response.status === 301 || 
-                         successIndicators.some(indicator => 
-                           responseBody.toLowerCase().includes(indicator)
-                         )
+                         (responseBody && (
+                           successIndicators.some(indicator => 
+                             responseBody.toLowerCase().includes(indicator)
+                           ) ||
+                           // Check for form submission success
+                           responseBody.toLowerCase().includes('form') && 
+                           responseBody.toLowerCase().includes('submit') &&
+                           !responseBody.toLowerCase().includes('error') &&
+                           !responseBody.toLowerCase().includes('failed')
+                         ))
 
         return {
           success: isSuccess,
@@ -411,8 +441,44 @@ export async function POST(request: Request) {
         const endTime = Date.now()
         console.log(`Unsubscribe API: Request completed in ${endTime - startTime}ms`)
         
+        // After a successful unsubscribe request
+        if (result.success) {
+          try {
+            // Get or create the Unsubscribed label
+            const labels = await gmail.users.labels.list({ userId: 'me' })
+            let label = labels.data.labels?.find(l => l.name === 'Unsubscribed')
+            
+            if (!label) {
+              const created = await gmail.users.labels.create({
+                userId: 'me',
+                requestBody: {
+                  name: 'Unsubscribed',
+                  labelListVisibility: 'labelShow',
+                  messageListVisibility: 'show'
+                }
+              })
+              label = created.data
+            }
+
+            if (label?.id) {
+              // Add the Unsubscribed label to the message
+              await gmail.users.messages.modify({
+                userId: 'me',
+                id: messageId,
+                requestBody: {
+                  addLabelIds: [label.id]
+                }
+              })
+              console.log('Unsubscribe API: Added Unsubscribed label to message')
+            }
+          } catch (labelError) {
+            console.error('Unsubscribe API: Error managing labels:', labelError)
+            // Don't fail the whole request if labeling fails
+          }
+        }
+        
         return NextResponse.json({ 
-          success: true,
+          success: result.success,
           type: 'mailto',
           message: 'Unsubscribe email sent successfully',
           labelApplied,
