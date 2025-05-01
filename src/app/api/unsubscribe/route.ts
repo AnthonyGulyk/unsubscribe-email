@@ -1,6 +1,29 @@
 import { NextResponse } from 'next/server'
 import { google } from 'googleapis'
 
+async function tryUnsubscribeRequest(url: string, method: 'GET' | 'POST') {
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      },
+      redirect: 'follow'
+    })
+    
+    return {
+      success: response.ok,
+      status: response.status,
+      statusText: response.statusText
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Request failed'
+    }
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const { unsubscribeLink, email, messageId } = await request.json()
@@ -63,7 +86,24 @@ export async function POST(request: Request) {
     const cleanLink = unsubscribeLink.replace(/[<>]/g, '').trim()
     console.log('Unsubscribe API: Cleaned link:', cleanLink)
 
-    let unsubscribeSuccess = false
+    // Add label first if we have one
+    let labelApplied = false
+    if (labelId) {
+      try {
+        console.log('Unsubscribe API: Adding label to message:', messageId)
+        await gmail.users.messages.modify({
+          userId: 'me',
+          id: messageId,
+          requestBody: {
+            addLabelIds: [labelId]
+          }
+        })
+        console.log('Unsubscribe API: Label added successfully')
+        labelApplied = true
+      } catch (labelError) {
+        console.error('Unsubscribe API: Error adding label:', labelError)
+      }
+    }
 
     // Handle mailto: links
     if (cleanLink.startsWith('mailto:')) {
@@ -101,7 +141,13 @@ export async function POST(request: Request) {
           }
         })
         console.log('Unsubscribe API: Email sent successfully, ID:', result.data.id)
-        unsubscribeSuccess = true
+        
+        return NextResponse.json({ 
+          success: true,
+          type: 'mailto',
+          message: 'Unsubscribe email sent successfully',
+          labelApplied
+        })
       } catch (emailError) {
         console.error('Unsubscribe API: Error sending unsubscribe email:', emailError)
         throw emailError
@@ -110,11 +156,23 @@ export async function POST(request: Request) {
     // Handle HTTP/HTTPS links
     else if (cleanLink.startsWith('http')) {
       console.log('Unsubscribe API: Processing HTTP link')
-      unsubscribeSuccess = true
+      
+      // Try POST first, then GET if POST fails
+      let result = await tryUnsubscribeRequest(cleanLink, 'POST')
+      console.log('Unsubscribe API: POST attempt result:', result)
+      
+      if (!result.success) {
+        console.log('Unsubscribe API: POST failed, trying GET')
+        result = await tryUnsubscribeRequest(cleanLink, 'GET')
+        console.log('Unsubscribe API: GET attempt result:', result)
+      }
+      
       return NextResponse.json({ 
-        success: true,
+        success: result.success,
         type: 'url',
-        url: cleanLink
+        url: cleanLink,
+        labelApplied,
+        requestResult: result
       })
     } 
     else {
@@ -124,33 +182,6 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
-
-    // Add the "Unsubscribed" label to the message
-    if (unsubscribeSuccess && labelId) {
-      try {
-        console.log('Unsubscribe API: Adding label to message:', messageId)
-        await gmail.users.messages.modify({
-          userId: 'me',
-          id: messageId,
-          requestBody: {
-            addLabelIds: [labelId]
-          }
-        })
-        console.log('Unsubscribe API: Label added successfully')
-      } catch (labelError) {
-        console.error('Unsubscribe API: Error adding label:', labelError)
-        // Don't throw here, as the unsubscribe itself was successful
-      }
-    } else if (unsubscribeSuccess) {
-      console.log('Unsubscribe API: No label ID available, skipping label application')
-    }
-
-    console.log('Unsubscribe API: Process completed successfully')
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Unsubscribe processed successfully',
-      labelApplied: unsubscribeSuccess && !!labelId
-    })
   } catch (error) {
     console.error('Unsubscribe API: Fatal error:', error)
     return NextResponse.json(

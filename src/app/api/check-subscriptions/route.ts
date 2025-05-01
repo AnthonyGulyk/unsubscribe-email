@@ -1,5 +1,12 @@
 import { NextResponse } from 'next/server'
 import { google } from 'googleapis'
+import { GaxiosPromise } from 'googleapis-common'
+import { gmail_v1 } from 'googleapis'
+
+interface MessageHeader {
+  name: string
+  value: string
+}
 
 export async function POST(request: Request) {
   try {
@@ -29,51 +36,55 @@ export async function POST(request: Request) {
 
     console.log('API: Searching for messages...')
     try {
-      // Get the Unsubscribed label ID if it exists
-      const labels = await gmail.users.labels.list({ userId: 'me' })
-      const unsubscribedLabel = labels.data.labels?.find(l => l.name === 'Unsubscribed')
-      const unsubscribedLabelId = unsubscribedLabel?.id
+      // Build the search query - start with a very permissive search
+      let searchQuery = 'newer_than:30d' // Get emails from last 30 days
+      console.log('API: Initial search query:', searchQuery)
 
       // First, let's try to list any messages to verify API access
       const testResponse = await gmail.users.messages.list({
         userId: 'me',
-        maxResults: 10,
-        q: unsubscribedLabelId ? `-label:${unsubscribedLabel.name} category:promotions` : 'category:promotions'
+        maxResults: 100, // Increased to get more results
+        q: searchQuery
       })
 
       console.log('API: Test query response:', {
         messagesFound: testResponse.data.messages?.length || 0,
         resultSizeEstimate: testResponse.data.resultSizeEstimate,
-        status: testResponse.status
+        status: testResponse.status,
+        query: searchQuery
       })
 
       if (!testResponse.data.messages?.length) {
         return NextResponse.json({ 
-          error: 'No messages found. Please make sure you have granted access to your Gmail account.',
+          error: 'No messages found in the last 30 days.',
           debug: {
             response: testResponse.data,
-            status: testResponse.status
+            status: testResponse.status,
+            query: searchQuery
           }
         }, { status: 200 })
       }
 
       // If we get here, we can access the Gmail API
       const messages = testResponse.data.messages || []
-      console.log('API: Found', messages.length, 'messages')
+      console.log('API: Found', messages.length, 'total messages')
       const subscriptions = new Map()
+      let processedCount = 0
+      let unsubscribeHeaderCount = 0
 
       // Fetch details for each message
       for (const message of messages) {
-        console.log('API: Fetching details for message:', message.id)
+        processedCount++
+        console.log(`API: Processing message ${processedCount}/${messages.length} (ID: ${message.id})`)
         try {
           const details = await gmail.users.messages.get({
             userId: 'me',
-            id: message.id,
+            id: message.id || '',
             format: 'metadata',
             metadataHeaders: ['From', 'Subject', 'List-Unsubscribe', 'Date']
           })
 
-          const headers = details.data.payload?.headers
+          const headers = details.data.payload?.headers as MessageHeader[] | undefined
           if (!headers) {
             console.log('API: No headers found for message:', message.id)
             continue
@@ -82,7 +93,11 @@ export async function POST(request: Request) {
           const from = headers.find(h => h.name === 'From')?.value || ''
           const listUnsubscribe = headers.find(h => h.name === 'List-Unsubscribe')?.value
           
-          console.log('API: List-Unsubscribe header:', listUnsubscribe)
+          if (listUnsubscribe) {
+            unsubscribeHeaderCount++
+            console.log('API: Found List-Unsubscribe header:', listUnsubscribe)
+            console.log('API: From:', from)
+          }
           
           // Only include if it has an unsubscribe header
           if (listUnsubscribe) {
@@ -93,7 +108,7 @@ export async function POST(request: Request) {
             // It might be in the format: <mailto:...>, <http...> or just a single URL
             const unsubscribeUrls = listUnsubscribe.match(/<([^>]+)>/g) || [listUnsubscribe]
             // Clean the URLs and prefer HTTP links over mailto
-            const cleanUrls = unsubscribeUrls.map(url => url.replace(/[<>]/g, '').trim())
+            const cleanUrls = unsubscribeUrls.map((url: string) => url.replace(/[<>]/g, '').trim())
             const unsubscribeLink = cleanUrls.find(url => url.startsWith('http')) || cleanUrls[0]
             
             console.log('API: All unsubscribe links:', cleanUrls)
@@ -117,8 +132,18 @@ export async function POST(request: Request) {
       }
 
       const result = Array.from(subscriptions.values())
-      console.log('API: Returning', result.length, 'subscriptions')
-      return NextResponse.json({ subscriptions: result })
+      console.log('API: Summary:')
+      console.log('- Total messages processed:', processedCount)
+      console.log('- Messages with List-Unsubscribe header:', unsubscribeHeaderCount)
+      console.log('- Unique subscriptions found:', result.length)
+      return NextResponse.json({ 
+        subscriptions: result,
+        debug: {
+          totalMessages: processedCount,
+          messagesWithUnsubscribe: unsubscribeHeaderCount,
+          uniqueSubscriptions: result.length
+        }
+      })
     } catch (gmailError) {
       console.error('API: Gmail API Error:', gmailError)
       return NextResponse.json({ 

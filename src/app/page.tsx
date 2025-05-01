@@ -46,14 +46,21 @@ export default function Home() {
     setError('')
     
     console.log('Session data:', session)
-    console.log('Access token:', session?.accessToken)
+    console.log('Access token:', session?.accessToken ? 'Present' : 'Missing')
+    
+    if (!session?.accessToken) {
+      setError('No access token available. Please sign in again.')
+      setLoading(false)
+      return
+    }
     
     try {
+      console.log('Sending request to check subscriptions...')
       const response = await fetch('/api/check-subscriptions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.accessToken}`,
+          'Authorization': `Bearer ${session.accessToken}`,
         },
         body: JSON.stringify({ email }),
       })
@@ -66,7 +73,18 @@ export default function Home() {
         throw new Error(data.error || 'Failed to check subscriptions')
       }
 
-      setSubscriptions(data.subscriptions)
+      if (!data.subscriptions) {
+        console.log('No subscriptions found in response:', data)
+        setError(`No subscriptions found. Debug info: ${JSON.stringify(data.debug)}`)
+        setSubscriptions([])
+        return
+      }
+
+      if (data.subscriptions.length === 0) {
+        setError(`No subscriptions found in the last 30 days. Messages checked: ${data.debug?.totalMessages || 0}, Messages with unsubscribe links: ${data.debug?.messagesWithUnsubscribe || 0}`)
+      }
+
+      setSubscriptions(data.subscriptions || [])
     } catch (error) {
       console.error('Submit error:', error)
       setError(error instanceof Error ? error.message : 'An error occurred')
@@ -102,28 +120,41 @@ export default function Home() {
       }
 
       if (data.type === 'url') {
-        // Open HTTP/HTTPS unsubscribe links in a new tab
-        window.open(data.url, '_blank')
-        setUnsubscribeStatus('Unsubscribe link opened in new tab. Please complete the process there.')
+        if (data.success) {
+          setUnsubscribeStatus('Successfully unsubscribed!')
+          // Remove from list after success
+          setTimeout(() => {
+            setSubscriptions(current =>
+              current.filter(sub => sub.email !== subscription.email)
+            )
+            setUnsubscribeStatus('')
+            setUnsubscribing(null)
+          }, 2000)
+        } else {
+          // If the automatic unsubscribe failed, open in new tab as fallback
+          window.open(data.url, '_blank')
+          setUnsubscribeStatus('Automatic unsubscribe failed. Please complete the process in the new tab.')
+          setTimeout(() => {
+            setUnsubscribeStatus('')
+            setUnsubscribing(null)
+          }, 5000)
+        }
       } else {
+        // For mailto links, remove from list immediately
         setUnsubscribeStatus('Successfully unsubscribed!')
+        setTimeout(() => {
+          setSubscriptions(current =>
+            current.filter(sub => sub.email !== subscription.email)
+          )
+          setUnsubscribeStatus('')
+          setUnsubscribing(null)
+        }, 2000)
       }
-
-      // Remove the subscription from the list after a short delay
-      setTimeout(() => {
-        setSubscriptions(current =>
-          current.filter(sub => sub.email !== subscription.email)
-        )
-        setUnsubscribeStatus('')
-      }, 2000)
     } catch (error) {
       console.error('Unsubscribe error:', error)
       setError(error instanceof Error ? error.message : 'Failed to unsubscribe')
       setUnsubscribeStatus('')
-    } finally {
-      setTimeout(() => {
-        setUnsubscribing(null)
-      }, 2000)
+      setUnsubscribing(null)
     }
   }
 
@@ -196,7 +227,7 @@ export default function Home() {
             </form>
           )}
 
-          {subscriptions.length > 0 && (
+          {Array.isArray(subscriptions) && subscriptions.length > 0 && (
             <div className="mt-12 max-w-2xl mx-auto">
               <h2 className="text-xl font-semibold mb-6">Your Subscriptions</h2>
               <div className="space-y-4">
