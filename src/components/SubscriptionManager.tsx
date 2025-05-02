@@ -189,7 +189,9 @@ export function SubscriptionManager() {
                           <span className="font-bold text-primary-900">
                             {sub.name}
                           </span>
-                          <span className="text-neutral-400">-</span>
+                          <span className="text-neutral-400">
+                            {' - '}
+                          </span>
                           <span className="text-sm text-neutral-400 truncate">
                             {sub.email}
                           </span>
