@@ -11,6 +11,12 @@ interface Subscription {
   messageId: string
 }
 
+// Helper function to get display name from email
+const getDisplayName = (email: string) => {
+  const [localPart, domain] = email.split('@')
+  return domain || email // If can't split, return full email
+}
+
 export function SubscriptionManager() {
   const { data: session } = useSession()
   const [loading, setLoading] = useState(false)
@@ -101,7 +107,9 @@ export function SubscriptionManager() {
       <div className="card">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-neutral-900">Your Subscriptions</h2>
+            <h2 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-accent-600 text-transparent bg-clip-text">
+              Your Subscriptions
+            </h2>
             {subscriptions.length > 0 && (
               <p className="text-sm text-neutral-600 mt-1">
                 Found {subscriptions.length} subscription{subscriptions.length === 1 ? '' : 's'}
@@ -111,18 +119,18 @@ export function SubscriptionManager() {
           <button
             onClick={handleFindSubscriptions}
             disabled={loading}
-            className="btn-primary"
+            className="btn-primary text-[10px] leading-none px-1.5 py-0.5 flex items-center gap-0.5 min-h-[16px] rounded"
           >
             {loading ? (
-              <span className="flex items-center gap-2">
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+              <>
+                <svg className="animate-spin h-2.5 w-2.5" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                Scanning...
-              </span>
+                <span>Scanning...</span>
+              </>
             ) : (
-              'Scan Inbox'
+              <span>Scan Inbox</span>
             )}
           </button>
         </div>
@@ -133,61 +141,82 @@ export function SubscriptionManager() {
           </div>
         )}
 
-        <div className="space-y-2">
-          {subscriptions.map((sub) => (
-            <div
-              key={sub.email}
-              className="card bg-neutral-50 hover:bg-white transition-all duration-200 p-3"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-medium text-neutral-900 truncate">
-                      {sub.name}
-                    </h3>
-                    <span className="text-sm text-neutral-500">•</span>
-                    <span className="text-sm text-neutral-600 truncate">{sub.email}</span>
-                  </div>
-                  <p className="text-xs text-neutral-500">
-                    Last received: {sub.lastReceived}
-                    {unsubscribing === sub.email && unsubscribeStatus && (
-                      <span className="text-primary-600 ml-2 animate-pulse">
-                        {unsubscribeStatus}
+        {subscriptions.length > 0 && (
+          <div className="overflow-hidden">
+            <table className="min-w-full divide-y divide-neutral-200">
+              <thead>
+                <tr className="text-xs text-neutral-500">
+                  <th className="text-left font-medium py-2 w-20"></th>
+                  <th className="text-left font-medium py-2">Sender</th>
+                  <th className="text-left font-medium py-2">Last Received</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100">
+                {subscriptions.map((sub) => (
+                  <tr 
+                    key={sub.email}
+                    className="group hover:bg-gradient-to-r hover:from-primary-50 hover:to-accent-50 
+                             transition-colors duration-200"
+                  >
+                    <td className="py-2">
+                      <button
+                        onClick={() => handleUnsubscribe(sub)}
+                        disabled={unsubscribing === sub.email}
+                        className="btn-secondary text-[9px] leading-none px-1 py-px 
+                                 opacity-80 group-hover:opacity-100 transition-opacity min-h-[14px] rounded"
+                      >
+                        {unsubscribing === sub.email ? (
+                          <>
+                            <svg className="inline-block animate-spin h-1.5 w-1.5 mr-0.5" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            Unsubscribing...
+                          </>
+                        ) : (
+                          'Unsubscribe'
+                        )}
+                      </button>
+                      {unsubscribing === sub.email && unsubscribeStatus && (
+                        <div className="text-[9px] text-primary-600 animate-pulse mt-0.5">
+                          {unsubscribeStatus}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-2">
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-primary-900">
+                            {sub.name}
+                          </span>
+                          <span className="text-neutral-400">-</span>
+                          <span className="text-sm text-neutral-400 truncate">
+                            {sub.email}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-2">
+                      <span className="text-xs text-neutral-500">
+                        {sub.lastReceived}
                       </span>
-                    )}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleUnsubscribe(sub)}
-                  disabled={unsubscribing === sub.email}
-                  className="btn-secondary whitespace-nowrap h-8 px-3 text-sm"
-                >
-                  {unsubscribing === sub.email ? (
-                    <span className="flex items-center gap-2">
-                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      Unsubscribing...
-                    </span>
-                  ) : (
-                    'Unsubscribe'
-                  )}
-                </button>
-              </div>
-            </div>
-          ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-          {subscriptions.length === 0 && !loading && !error && (
-            <div className="text-center py-12 text-neutral-500">
-              <svg className="w-16 h-16 mx-auto mb-4 text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              <p className="text-lg">No subscriptions found</p>
-              <p className="text-sm">Click "Scan Inbox" to find your subscriptions</p>
-            </div>
-          )}
-        </div>
+        {subscriptions.length === 0 && !loading && !error && (
+          <div className="text-center py-12 text-neutral-500">
+            <svg className="w-16 h-16 mx-auto mb-4 text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            <p className="text-lg">No subscriptions found</p>
+            <p className="text-sm">Click "Scan Inbox" to find your subscriptions</p>
+          </div>
+        )}
       </div>
     </div>
   )
